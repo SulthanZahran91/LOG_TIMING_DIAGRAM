@@ -1,0 +1,351 @@
+<Window x:Class="LOG_TIMING_DIAGRAM.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:rendering="clr-namespace:LOG_TIMING_DIAGRAM.Rendering"
+        Title="PLC Log Visualizer"
+        Height="720"
+        Width="1220"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Window.Resources>
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                BorderBrush="#FF707070"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="16"
+                Background="#FF1E1E1E"
+                AllowDrop="True"
+                Drop="OnFilesDropped"
+                DragOver="OnDragOver">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Width="Auto" HorizontalAlignment="Left">
+                    <TextBlock Text="Drop PLC log files here"
+                               Foreground="White"
+                               FontSize="16"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="Supported formats: plc_debug, plc_tab"
+                               Foreground="#FFB0B0B0"
+                               Margin="0,6,0,0" />
+                </StackPanel>
+                <Button Content="Browse..."
+                        Margin="12,0,0,0"
+                        Padding="18,6"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Click="OnLoadFilesClicked" />
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1"
+              Margin="0,12,0,12"
+              Visibility="{Binding ParseJob.IsRunning, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ProgressBar Grid.Column="0"
+                         Height="18"
+                         Minimum="0"
+                         Maximum="100"
+                         Value="{Binding ParseJob.ProgressPercent, Mode=OneWay}" />
+            <TextBlock Grid.Column="1"
+                       Margin="12,0,0,0"
+                       VerticalAlignment="Center"
+                       Foreground="White"
+                       Text="{Binding ParseJob.StatusMessage}" />
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <GroupBox Header="Statistics" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Stats.EntryCount, StringFormat=Entries: {0}}"
+                                   Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding Stats.DeviceCount, StringFormat=Devices: {0}}"
+                                   Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding Stats.SignalCount, StringFormat=Signals: {0}}"
+                                   Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding Stats.TimeRangeText, StringFormat=Time Range: {0}}"
+                                   Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding Stats.ErrorCount, StringFormat=Errors: {0}}"
+                                   Margin="0,0,0,8" />
+                        <ItemsControl ItemsSource="{Binding Stats.Errors}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Foreground="#FFE0B060" TextWrapping="Wrap" Margin="0,2,0,2" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Grid.Row="1"
+                          Header="Signal Filters"
+                          Margin="0,0,0,0"
+                          IsEnabled="{Binding HasData}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBox Grid.Row="0"
+                                 Margin="0,0,0,8"
+                                 Text="{Binding FilterSearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Search by device or signal name" />
+                        <StackPanel Grid.Row="1"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,8">
+                            <CheckBox Content="Boolean"
+                                      Margin="0,0,12,0"
+                                      IsChecked="{Binding FilterIncludeBoolean}" />
+                            <CheckBox Content="Integer"
+                                      Margin="0,0,12,0"
+                                      IsChecked="{Binding FilterIncludeInteger}" />
+                            <CheckBox Content="String"
+                                      IsChecked="{Binding FilterIncludeString}" />
+                        </StackPanel>
+                        <CheckBox Grid.Row="2"
+                                  Content="Show only signals with changes"
+                                  Margin="0,0,0,8"
+                                  IsChecked="{Binding FilterShowOnlyChanged}" />
+                        <StackPanel Grid.Row="3"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,8">
+                            <Button Content="Select Visible"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding SelectAllFiltersCommand}" />
+                            <Button Content="Clear Selection"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding DeselectAllFiltersCommand}" />
+                            <Button Content="Reset Filters"
+                                    Command="{Binding ClearFiltersCommand}" />
+                        </StackPanel>
+                        <TextBlock Grid.Row="4"
+                                   Text="{Binding FilterStatusText}"
+                                   Margin="0,0,0,8"
+                                   Foreground="#FFB0B0B0" />
+                        <ListBox Grid.Row="5"
+                                 ItemsSource="{Binding SignalFilterView}"
+                                 ScrollViewer.CanContentScroll="True"
+                                 BorderBrush="#FF454545"
+                                 BorderThickness="1"
+                                 MinHeight="220"
+                                 HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 VirtualizingStackPanel.IsVirtualizing="True"
+                                 VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                 VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                                 SelectionMode="Single">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                              ToolTip="{Binding Key}"
+                                              VerticalContentAlignment="Center">
+                                        <CheckBox.Content>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding DetailText}"
+                                                           FontSize="11"
+                                                           Margin="0,2,0,0">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="#FF909090" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasChanges}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#FFE0B060" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </CheckBox.Content>
+                                    </CheckBox>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                            <ListBox.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontWeight="Bold"
+                                                       Margin="0,6,0,2" />
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                    <GroupStyle.Panel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel />
+                                        </ItemsPanelTemplate>
+                                    </GroupStyle.Panel>
+                                </GroupStyle>
+                            </ListBox.GroupStyle>
+                        </ListBox>
+                    </Grid>
+                </GroupBox>
+            </Grid>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <GroupBox Grid.Row="0" Header="Zoom">
+                    <StackPanel>
+                        <Slider Minimum="1"
+                                Maximum="100"
+                                TickFrequency="1"
+                                SmallChange="1"
+                                LargeChange="5"
+                                Value="{Binding ZoomLevel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                IsEnabled="{Binding HasData}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="Zoom In"
+                                    Width="90"
+                                    Margin="0,0,6,0"
+                                    Command="{Binding ZoomInCommand}" />
+                            <Button Content="Zoom Out"
+                                    Width="90"
+                                    Margin="0,0,6,0"
+                                    Command="{Binding ZoomOutCommand}" />
+                            <Button Content="Reset"
+                                    Width="90"
+                                    Command="{Binding ResetViewCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Grid.Row="1" Header="Time Window" Margin="0,12,0,12">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Duration (s)"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0" />
+                            <TextBox Width="80"
+                                     IsEnabled="{Binding HasData}"
+                                     Text="{Binding WindowDurationSeconds, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     PreviewKeyDown="OnDurationTextPreviewKeyDown" />
+                        </StackPanel>
+                        <Slider Minimum="0"
+                                Maximum="1"
+                                TickFrequency="0.05"
+                                SmallChange="0.01"
+                                LargeChange="0.1"
+                                IsEnabled="{Binding HasData}"
+                                Value="{Binding TimelinePosition, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="{Binding VisibleRangeText}"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </GroupBox>
+
+                <Border Grid.Row="2"
+                        BorderBrush="#FF454545"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="4">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding ActiveSignals}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <rendering:WaveformRowControl SignalData="{Binding}"
+                                                                  Height="40"
+                                                                  Viewport="{Binding DataContext.Viewport, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+
+                <GroupBox Grid.Row="3" Header="Pan &amp; Scroll" Margin="0,12,0,12">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Pan Left"
+                                Width="90"
+                                Margin="0,0,8,0"
+                                Command="{Binding PanLeftCommand}" />
+                        <Button Content="Pan Right"
+                                Width="90"
+                                Command="{Binding PanRightCommand}" />
+                    </StackPanel>
+                </GroupBox>
+
+                <GridSplitter Grid.Row="4"
+                              HorizontalAlignment="Stretch"
+                              Height="6"
+                              Background="#FF2E2E2E" />
+
+                <DataGrid Grid.Row="5"
+                          Margin="0,12,0,0"
+                          ItemsSource="{Binding Entries}"
+                          AutoGenerateColumns="False"
+                          HeadersVisibility="Column"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          EnableRowVirtualization="True"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          GridLinesVisibility="Horizontal">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Device"
+                                            Binding="{Binding DeviceId}" />
+                        <DataGridTextColumn Header="Signal"
+                                            Binding="{Binding SignalName}" />
+                        <DataGridTextColumn Header="Timestamp"
+                                            Binding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}" />
+                        <DataGridTextColumn Header="Value"
+                                            Binding="{Binding Value}" />
+                        <DataGridTextColumn Header="Type"
+                                            Binding="{Binding SignalType}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0">
+            <Button Content="Cancel Parsing"
+                    Margin="0,0,12,0"
+                    Padding="16,6"
+                    Command="{Binding CancelParseCommand}" />
+            <Button Content="Clear"
+                    Padding="16,6"
+                    Command="{Binding ClearCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>
