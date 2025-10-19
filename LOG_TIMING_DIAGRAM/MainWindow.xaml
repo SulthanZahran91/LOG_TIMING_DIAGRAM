@@ -2,12 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:rendering="clr-namespace:LOG_TIMING_DIAGRAM.Rendering"
+        xmlns:utils="clr-namespace:LOG_TIMING_DIAGRAM.Utils"
         Title="PLC Log Visualizer"
         Height="720"
         Width="1220"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <utils:DeviceSelectionConverter x:Key="DeviceSelectionConverter" />
     </Window.Resources>
     <Grid Margin="12">
         <Grid.RowDefinitions>
@@ -110,6 +112,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <TextBox Grid.Row="0"
@@ -128,20 +131,44 @@
                             <CheckBox Content="String"
                                       IsChecked="{Binding FilterIncludeString}" />
                         </StackPanel>
+                        <CheckBox Grid.Row="2"
+                                  Content="Show only signals with changes"
+                                  Margin="0,0,0,8"
+                                  IsChecked="{Binding FilterShowOnlyChanged}" />
+                        <StackPanel Grid.Row="4"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,8">
+                            <ComboBox Width="160"
+                                      Margin="0,0,8,0"
+                                      ItemsSource="{Binding FilterPresetNames}"
+                                      SelectedItem="{Binding SelectedFilterPreset, Mode=TwoWay}" />
+                            <TextBox Width="150"
+                                     Margin="0,0,8,0"
+                                     Text="{Binding NewFilterPresetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Name for a new preset" />
+                            <Button Content="Save Preset"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding SaveFilterPresetCommand}" />
+                            <Button Content="Delete Preset"
+                                    Command="{Binding DeleteFilterPresetCommand}" />
+                        </StackPanel>
                         <StackPanel Grid.Row="3"
                                     Orientation="Horizontal"
                                     Margin="0,0,0,8">
-                            <Button Content="Clear Selection"
+                            <Button Content="Select All"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding SelectAllFiltersCommand}" />
+                            <Button Content="Deselect All"
                                     Margin="0,0,8,0"
                                     Command="{Binding DeselectAllFiltersCommand}" />
                             <Button Content="Reset Filters"
                                     Command="{Binding ClearFiltersCommand}" />
                         </StackPanel>
-                        <TextBlock Grid.Row="4"
+                        <TextBlock Grid.Row="5"
                                    Text="{Binding FilterStatusText}"
                                    Margin="0,0,0,8"
                                    Foreground="#FFB0B0B0" />
-                        <ListBox Grid.Row="5"
+                        <ListBox Grid.Row="6"
                                  ItemsSource="{Binding SignalFilterView}"
                                  ScrollViewer.CanContentScroll="True"
                                  BorderBrush="#FF454545"
@@ -167,20 +194,6 @@
                                             <StackPanel>
                                                 <TextBlock Text="{Binding DisplayName}"
                                                            FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding DetailText}"
-                                                           FontSize="11"
-                                                           Margin="0,2,0,0">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground" Value="#FF909090" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasChanges}" Value="True">
-                                                                    <Setter Property="Foreground" Value="#FFE0B060" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
                                             </StackPanel>
                                         </CheckBox.Content>
                                     </CheckBox>
@@ -196,8 +209,20 @@
                                                         <Expander Margin="0,6,0,2"
                                                                   IsExpanded="True">
                                                             <Expander.Header>
-                                                                <TextBlock Text="{Binding Name}"
-                                                                           FontWeight="Bold" />
+                                                                <CheckBox IsThreeState="True"
+                                                                          Command="{Binding DataContext.ToggleDeviceSelectionCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                                          CommandParameter="{Binding}">
+                                                                    <CheckBox.IsChecked>
+                                                                        <MultiBinding Converter="{StaticResource DeviceSelectionConverter}" Mode="OneWay">
+                                                                            <Binding />
+                                                                            <Binding RelativeSource="{RelativeSource AncestorType=ListBox}" Path="DataContext" />
+                                                                        </MultiBinding>
+                                                                    </CheckBox.IsChecked>
+                                                                    <CheckBox.Content>
+                                                                        <TextBlock Text="{Binding Name}"
+                                                                                   FontWeight="Bold" />
+                                                                    </CheckBox.Content>
+                                                                </CheckBox>
                                                             </Expander.Header>
                                                             <ItemsPresenter />
                                                         </Expander>

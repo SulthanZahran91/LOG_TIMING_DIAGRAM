@@ -12,6 +12,7 @@ using LOG_TIMING_DIAGRAM.Models;
 using LOG_TIMING_DIAGRAM.Parsers;
 using LOG_TIMING_DIAGRAM.Utils;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 
 namespace LOG_TIMING_DIAGRAM.ViewModels
 {
@@ -24,6 +25,9 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
         private readonly Dictionary<string, SignalCache> _signalLookup;
         private readonly List<string> _currentFiles;
         private readonly ICollectionView _filterCollectionView;
+        private readonly ObservableCollection<string> _filterPresetNames;
+        private readonly Dictionary<string, FilterPreset> _filterPresets;
+        private readonly string _presetStoragePath;
 
         private bool _hasData;
         private bool _isBusy;
@@ -42,6 +46,9 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
         private string _filterStatusText = "No signals loaded.";
         private bool _suppressFilterRefresh;
         private bool _suppressSelectionNotifications;
+        private bool _isApplyingPreset;
+        private string _selectedFilterPreset;
+        private string _newFilterPresetName = string.Empty;
 
         public MainWindowViewModel()
         {
@@ -63,6 +70,12 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
                 }
             }
 
+            _filterPresetNames = new ObservableCollection<string>();
+            FilterPresetNames = new ReadOnlyObservableCollection<string>(_filterPresetNames);
+            _filterPresets = new Dictionary<string, FilterPreset>(StringComparer.OrdinalIgnoreCase);
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            _presetStoragePath = Path.Combine(appData, "LOG_TIMING_DIAGRAM", "filter-presets.json");
+
             Stats = new StatsViewModel();
             ParseJob = new ParseJobViewModel();
             Viewport = new ViewportStateViewModel();
@@ -78,6 +91,9 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             SelectAllFiltersCommand = new RelayCommand(SelectAllFilters, () => HasVisibleFilter(filter => !filter.IsSelected));
             DeselectAllFiltersCommand = new RelayCommand(DeselectAllFilters, () => HasVisibleFilter(filter => filter.IsSelected));
             ClearFiltersCommand = new RelayCommand(ClearFilters, () => _signalFilters.Count > 0);
+            ToggleDeviceSelectionCommand = new RelayCommand<CollectionViewGroup>(ToggleDeviceSelection, group => group != null);
+            SaveFilterPresetCommand = new RelayCommand(SaveCurrentFilterPreset, CanSaveFilterPreset);
+            DeleteFilterPresetCommand = new RelayCommand(DeleteSelectedFilterPreset, () => !string.IsNullOrEmpty(SelectedFilterPreset));
 
             ParseJob.PropertyChanged += (sender, args) =>
             {
@@ -90,6 +106,8 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
 
             Viewport.TimeRangeChanged += OnViewportTimeRangeChanged;
             Viewport.ZoomLevelChanged += OnViewportZoomLevelChanged;
+
+            LoadFilterPresets();
         }
 
         private void RefreshVisibleEntries(ICollection<string> selectedKeys)
@@ -163,6 +181,42 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
 
         public RelayCommand ClearFiltersCommand { get; }
 
+        public RelayCommand<CollectionViewGroup> ToggleDeviceSelectionCommand { get; }
+
+        public RelayCommand SaveFilterPresetCommand { get; }
+
+        public RelayCommand DeleteFilterPresetCommand { get; }
+
+        public ReadOnlyObservableCollection<string> FilterPresetNames { get; }
+
+        public string SelectedFilterPreset
+        {
+            get => _selectedFilterPreset;
+            set
+            {
+                if (SetProperty(ref _selectedFilterPreset, value))
+                {
+                    DeleteFilterPresetCommand?.RaiseCanExecuteChanged();
+                    if (!string.IsNullOrEmpty(value))
+                    {
+                        ApplyFilterPreset(value);
+                    }
+                }
+            }
+        }
+
+        public string NewFilterPresetName
+        {
+            get => _newFilterPresetName;
+            set
+            {
+                if (SetProperty(ref _newFilterPresetName, value))
+                {
+                    SaveFilterPresetCommand?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
         public bool HasData
         {
             get => _hasData;
@@ -173,6 +227,7 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
                     ClearCommand.RaiseCanExecuteChanged();
                     ResetViewCommand.RaiseCanExecuteChanged();
                     RefreshCommandStates();
+                    SaveFilterPresetCommand?.RaiseCanExecuteChanged();
                 }
             }
         }
@@ -236,9 +291,14 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             set
             {
                 var normalized = value ?? string.Empty;
-                if (SetProperty(ref _filterSearchText, normalized) && !_suppressFilterRefresh)
+                if (SetProperty(ref _filterSearchText, normalized))
                 {
-                    RefreshFilterView();
+                    if (!_suppressFilterRefresh)
+                    {
+                        RefreshFilterView();
+                    }
+
+                    MarkPresetDirty();
                 }
             }
         }
@@ -248,9 +308,14 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             get => _filterIncludeBoolean;
             set
             {
-                if (SetProperty(ref _filterIncludeBoolean, value) && !_suppressFilterRefresh)
+                if (SetProperty(ref _filterIncludeBoolean, value))
                 {
-                    RefreshFilterView();
+                    if (!_suppressFilterRefresh)
+                    {
+                        RefreshFilterView();
+                    }
+
+                    MarkPresetDirty();
                 }
             }
         }
@@ -260,9 +325,14 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             get => _filterIncludeInteger;
             set
             {
-                if (SetProperty(ref _filterIncludeInteger, value) && !_suppressFilterRefresh)
+                if (SetProperty(ref _filterIncludeInteger, value))
                 {
-                    RefreshFilterView();
+                    if (!_suppressFilterRefresh)
+                    {
+                        RefreshFilterView();
+                    }
+
+                    MarkPresetDirty();
                 }
             }
         }
@@ -272,9 +342,14 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             get => _filterIncludeString;
             set
             {
-                if (SetProperty(ref _filterIncludeString, value) && !_suppressFilterRefresh)
+                if (SetProperty(ref _filterIncludeString, value))
                 {
-                    RefreshFilterView();
+                    if (!_suppressFilterRefresh)
+                    {
+                        RefreshFilterView();
+                    }
+
+                    MarkPresetDirty();
                 }
             }
         }
@@ -284,9 +359,14 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             get => _filterShowOnlyChanged;
             set
             {
-                if (SetProperty(ref _filterShowOnlyChanged, value) && !_suppressFilterRefresh)
+                if (SetProperty(ref _filterShowOnlyChanged, value))
                 {
-                    RefreshFilterView();
+                    if (!_suppressFilterRefresh)
+                    {
+                        RefreshFilterView();
+                    }
+
+                    MarkPresetDirty();
                 }
             }
         }
@@ -517,6 +597,9 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             RefreshVisibleEntries(selectedKeys);
             UpdateFilterStatus();
             RefreshCommandStates();
+
+            MarkPresetDirty();
+            SaveFilterPresetCommand?.RaiseCanExecuteChanged();
         }
 
         public void JumpToTimestamp(DateTime timestamp)
@@ -558,8 +641,14 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             var total = _signalLookup.Count;
             var filtered = _signalFilters.Count(IsFilterVisible);
             var activeCount = _activeSignals.Count;
+            var visibleDevices = _signalFilters
+                .Where(IsFilterVisible)
+                .GroupBy(filter => filter.DeviceId)
+                .ToList();
 
-            FilterStatusText = $"Visible: {filtered}/{total} | Selected: {activeCount}";
+            var selectedDevices = visibleDevices.Count(group => group.All(filter => filter.IsSelected));
+
+            FilterStatusText = $"Visible: {filtered}/{total} | Selected: {activeCount} | Devices: {selectedDevices}/{visibleDevices.Count}";
         }
 
         private void UpdateFilterCommands()
@@ -684,6 +773,69 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             return false;
         }
 
+        internal bool? GetDeviceSelectionState(CollectionViewGroup group)
+        {
+            if (group == null)
+            {
+                return false;
+            }
+
+            var items = group.Items?.OfType<SignalFilterItemViewModel>().ToList();
+            if (items == null || items.Count == 0)
+            {
+                return false;
+            }
+
+            var selectedCount = items.Count(item => item.IsSelected);
+            if (selectedCount == 0)
+            {
+                return false;
+            }
+
+            if (selectedCount == items.Count)
+            {
+                return true;
+            }
+
+            return null;
+        }
+
+        private void ToggleDeviceSelection(CollectionViewGroup group)
+        {
+            if (group == null)
+            {
+                return;
+            }
+
+            var currentState = GetDeviceSelectionState(group);
+            var selectAll = currentState != true;
+            ApplyDeviceSelection(group, selectAll);
+        }
+
+        private void ApplyDeviceSelection(CollectionViewGroup group, bool selectAll)
+        {
+            var items = group?.Items?.OfType<SignalFilterItemViewModel>().ToList();
+            if (items == null || items.Count == 0)
+            {
+                return;
+            }
+
+            _suppressSelectionNotifications = true;
+            try
+            {
+                foreach (var item in items)
+                {
+                    item.IsSelected = selectAll;
+                }
+            }
+            finally
+            {
+                _suppressSelectionNotifications = false;
+            }
+
+            UpdateVisibleSignalsFromFilters();
+        }
+
         private void SelectAllFilters()
         {
             if (_signalFilters.Count == 0)
@@ -768,6 +920,208 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             }
 
             UpdateVisibleSignalsFromFilters();
+        }
+
+        private void MarkPresetDirty()
+        {
+            if (_isApplyingPreset)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(_selectedFilterPreset))
+            {
+                _selectedFilterPreset = null;
+                OnPropertyChanged(nameof(SelectedFilterPreset));
+            }
+
+            SaveFilterPresetCommand?.RaiseCanExecuteChanged();
+            DeleteFilterPresetCommand?.RaiseCanExecuteChanged();
+        }
+
+        private bool CanSaveFilterPreset()
+        {
+            return HasData && !string.IsNullOrWhiteSpace(NewFilterPresetName) && _signalFilters.Count > 0;
+        }
+
+        private void SaveCurrentFilterPreset()
+        {
+            var name = NewFilterPresetName?.Trim();
+            if (string.IsNullOrEmpty(name))
+            {
+                return;
+            }
+
+            var preset = CaptureCurrentFilterPreset();
+            preset.Name = name;
+
+            _filterPresets[name] = preset;
+            UpdatePresetCollections();
+            PersistFilterPresets();
+
+            _isApplyingPreset = true;
+            try
+            {
+                SelectedFilterPreset = name;
+            }
+            finally
+            {
+                _isApplyingPreset = false;
+            }
+
+            NewFilterPresetName = string.Empty;
+        }
+
+        private void DeleteSelectedFilterPreset()
+        {
+            if (string.IsNullOrEmpty(SelectedFilterPreset))
+            {
+                return;
+            }
+
+            if (_filterPresets.Remove(SelectedFilterPreset))
+            {
+                PersistFilterPresets();
+                UpdatePresetCollections();
+            }
+
+            _selectedFilterPreset = null;
+            OnPropertyChanged(nameof(SelectedFilterPreset));
+            SaveFilterPresetCommand?.RaiseCanExecuteChanged();
+        }
+
+        private FilterPreset CaptureCurrentFilterPreset()
+        {
+            var selectedSignals = _signalFilters
+                .Where(filter => filter.IsSelected)
+                .Select(filter => filter.Key)
+                .ToList();
+
+            var selectedDevices = _signalFilters
+                .GroupBy(filter => filter.DeviceId)
+                .Where(group => group.Any() && group.All(filter => filter.IsSelected))
+                .Select(group => group.Key)
+                .ToList();
+
+            return new FilterPreset
+            {
+                SearchText = FilterSearchText,
+                IncludeBoolean = FilterIncludeBoolean,
+                IncludeInteger = FilterIncludeInteger,
+                IncludeString = FilterIncludeString,
+                ShowOnlyChanged = FilterShowOnlyChanged,
+                SelectedSignals = selectedSignals,
+                SelectedDevices = selectedDevices
+            };
+        }
+
+        private void ApplyFilterPreset(string name)
+        {
+            if (!_filterPresets.TryGetValue(name, out var preset))
+            {
+                return;
+            }
+
+            _isApplyingPreset = true;
+            try
+            {
+                _suppressFilterRefresh = true;
+                _suppressSelectionNotifications = true;
+                try
+                {
+                    FilterSearchText = preset.SearchText ?? string.Empty;
+                    FilterIncludeBoolean = preset.IncludeBoolean;
+                    FilterIncludeInteger = preset.IncludeInteger;
+                    FilterIncludeString = preset.IncludeString;
+                    FilterShowOnlyChanged = preset.ShowOnlyChanged;
+
+                    var selectedKeys = new HashSet<string>(preset.SelectedSignals ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+                    var selectAll = selectedKeys.Count == 0;
+
+                    foreach (var filter in _signalFilters)
+                    {
+                        filter.IsSelected = selectAll || selectedKeys.Contains(filter.Key);
+                    }
+                }
+                finally
+                {
+                    _suppressSelectionNotifications = false;
+                    _suppressFilterRefresh = false;
+                }
+
+                RefreshFilterView();
+                UpdateVisibleSignalsFromFilters();
+            }
+            finally
+            {
+                _isApplyingPreset = false;
+            }
+
+            SaveFilterPresetCommand?.RaiseCanExecuteChanged();
+        }
+
+        private void LoadFilterPresets()
+        {
+            try
+            {
+                if (!File.Exists(_presetStoragePath))
+                {
+                    return;
+                }
+
+                var json = File.ReadAllText(_presetStoragePath);
+                var presets = JsonSerializer.Deserialize<List<FilterPreset>>(json) ?? new List<FilterPreset>();
+
+                _filterPresets.Clear();
+                foreach (var preset in presets)
+                {
+                    if (!string.IsNullOrWhiteSpace(preset.Name))
+                    {
+                        _filterPresets[preset.Name] = preset;
+                    }
+                }
+
+                UpdatePresetCollections();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainWindowViewModel] Failed to load presets: {ex}");
+            }
+        }
+
+        private void PersistFilterPresets()
+        {
+            try
+            {
+                var directory = Path.GetDirectoryName(_presetStoragePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var payload = _filterPresets.Values
+                    .OrderBy(preset => preset.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_presetStoragePath, json);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainWindowViewModel] Failed to save presets: {ex}");
+            }
+        }
+
+        private void UpdatePresetCollections()
+        {
+            _filterPresetNames.Clear();
+            foreach (var name in _filterPresets.Keys.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+            {
+                _filterPresetNames.Add(name);
+            }
+
+            SaveFilterPresetCommand?.RaiseCanExecuteChanged();
+            DeleteFilterPresetCommand?.RaiseCanExecuteChanged();
         }
 
         private void DetachSignalFilterHandlers()

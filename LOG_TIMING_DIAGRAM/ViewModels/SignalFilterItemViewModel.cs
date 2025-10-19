@@ -34,12 +34,6 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
 
         public string DeviceGroupName => string.IsNullOrWhiteSpace(DeviceId) ? "Unknown Device" : DeviceId;
 
-        public string DetailText => string.IsNullOrWhiteSpace(DeviceId)
-            //? $"{SignalType}{(HasChanges ? " (changes)" : string.Empty)}"
-            ? $"{SignalType}"
-            //: $"{DeviceId} - {SignalType}{(HasChanges ? " (changes)" : string.Empty)}";
-            : $"{DeviceId} - {SignalType}";
-
         public bool IsSelected
         {
             get => _isSelected;
