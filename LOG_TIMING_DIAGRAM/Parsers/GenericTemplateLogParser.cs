@@ -18,6 +18,8 @@ namespace LOG_TIMING_DIAGRAM.Parsers
         {
             public string DeviceId { get; set; }
 
+            public string SignalKey { get; set; }
+
             public string SignalName { get; set; }
 
             public DateTime Timestamp { get; set; }
@@ -26,6 +28,15 @@ namespace LOG_TIMING_DIAGRAM.Parsers
 
             public SignalType SignalType { get; set; }
         }
+
+        private static readonly string[] DefaultTimestampFormats =
+        {
+            "yyyy-MM-dd HH:mm:ss.fff",
+            "yyyy-MM-dd HH:mm:ss.ffff",
+            "yyyy-MM-dd HH:mm:ss.fffff",
+            "yyyy-MM-dd HH:mm:ss.ffffff",
+            "yyyy-MM-dd HH:mm:ss"
+        };
 
         protected GenericTemplateLogParser()
         {
@@ -39,6 +50,8 @@ namespace LOG_TIMING_DIAGRAM.Parsers
         protected Regex LineRegex { get; }
 
         protected virtual string TimestampFormat => "yyyy-MM-dd HH:mm:ss.fff";
+
+        protected virtual string[] TimestampFormats => DefaultTimestampFormats;
 
         protected virtual Regex DeviceIdRegex => new Regex(@"[A-Za-z0-9_-]+-\d+", RegexOptions.Compiled);
 
@@ -181,16 +194,19 @@ namespace LOG_TIMING_DIAGRAM.Parsers
                     try
                     {
                         var parsed = ParseLine(rawLine);
+                        var signalName = parsed.SignalName ?? throw new FormatException("Signal name missing.");
+                        var signalKey = parsed.SignalKey ?? ComposeSignalKey(parsed.DeviceId, null, signalName);
                         var entry = new LogEntry(
                             parsed.DeviceId,
-                            parsed.SignalName,
+                            signalKey,
+                            signalName,
                             parsed.Timestamp,
                             parsed.Value,
                             parsed.SignalType);
 
                         entries.Add(entry);
                         devices.Add(parsed.DeviceId);
-                        signals.Add(parsed.SignalName);
+                        signals.Add(signalKey);
 
                         start = start == null || entry.Timestamp < start ? entry.Timestamp : start;
                         end = end == null || entry.Timestamp > end ? entry.Timestamp : end;
@@ -254,7 +270,46 @@ namespace LOG_TIMING_DIAGRAM.Parsers
 
         protected virtual DateTime ParseTimestamp(string value)
         {
-            return DateTime.ParseExact(value, TimestampFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new FormatException("Timestamp segment missing.");
+            }
+
+            var formats = TimestampFormats;
+            var primaryFormat = TimestampFormat;
+
+            if (formats == null || formats.Length == 0)
+            {
+                formats = string.IsNullOrWhiteSpace(primaryFormat)
+                    ? DefaultTimestampFormats
+                    : new[] { primaryFormat };
+            }
+            else if (!string.IsNullOrWhiteSpace(primaryFormat))
+            {
+                var containsPrimary = false;
+                for (var i = 0; i < formats.Length; i++)
+                {
+                    if (string.Equals(formats[i], primaryFormat, StringComparison.Ordinal))
+                    {
+                        containsPrimary = true;
+                        break;
+                    }
+                }
+
+                if (!containsPrimary)
+                {
+                    var extended = new string[formats.Length + 1];
+                    extended[0] = primaryFormat;
+                    Array.Copy(formats, 0, extended, 1, formats.Length);
+                    formats = extended;
+                }
+            }
+
+            return DateTime.ParseExact(
+                value,
+                formats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
         }
 
         protected virtual string ExtractDeviceId(string input)
@@ -291,8 +346,7 @@ namespace LOG_TIMING_DIAGRAM.Parsers
                 throw new ArgumentNullException(nameof(signal));
             }
 
-            var prefix = string.IsNullOrEmpty(unit) ? deviceId : $"{deviceId}@{unit}";
-            return $"{prefix}::{signal}";
+            return $"{deviceId}::{signal}";
         }
     }
 }

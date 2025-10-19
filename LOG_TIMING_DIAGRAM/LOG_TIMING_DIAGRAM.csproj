@@ -8,4 +8,13 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests\**\*.cs" />
+    <None Include="Tests\**\*.cs" />
+  </ItemGroup>
+
 </Project>

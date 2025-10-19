@@ -38,7 +38,7 @@ namespace LOG_TIMING_DIAGRAM.Utils
                     {
                         allEntries.Add(entry);
                         devices.Add(entry.DeviceId);
-                        signals.Add(entry.SignalName);
+                        signals.Add(entry.SignalKey ?? $"{entry.DeviceId}::{entry.SignalName}");
                         start = start == null || entry.Timestamp < start ? entry.Timestamp : start;
                         end = end == null || entry.Timestamp > end ? entry.Timestamp : end;
                     }

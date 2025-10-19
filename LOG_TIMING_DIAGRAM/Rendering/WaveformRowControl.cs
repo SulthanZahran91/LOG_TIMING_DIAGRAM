@@ -28,7 +28,7 @@ namespace LOG_TIMING_DIAGRAM.Rendering
         private static readonly Brush BooleanHighBrush = new SolidColorBrush(Color.FromRgb(99, 179, 119));
         private static readonly Brush BooleanLowBrush = new SolidColorBrush(Color.FromRgb(64, 64, 64));
         private static readonly Pen TransitionPen = new Pen(new SolidColorBrush(Color.FromRgb(220, 220, 220)), 1);
-        private static readonly Brush StateBrush = new SolidColorBrush(Color.FromRgb(80, 120, 200));
+        private static readonly Brush StateBrush = null;
         private static readonly Brush StateTextBrush = Brushes.White;
 
         static WaveformRowControl()

@@ -18,10 +18,11 @@ namespace LOG_TIMING_DIAGRAM.Utils
             var map = new Dictionary<string, List<LogEntry>>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in parsedLog.Entries)
             {
-                if (!map.TryGetValue(entry.SignalName, out var list))
+                var key = entry.SignalKey ?? $"{entry.DeviceId}::{entry.SignalName}";
+                if (!map.TryGetValue(key, out var list))
                 {
                     list = new List<LogEntry>();
-                    map.Add(entry.SignalName, list);
+                    map.Add(key, list);
                 }
 
                 list.Add(entry);

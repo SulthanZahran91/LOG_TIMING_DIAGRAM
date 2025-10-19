@@ -4,9 +4,10 @@ namespace LOG_TIMING_DIAGRAM.Models
 {
     public sealed class LogEntry
     {
-        public LogEntry(string deviceId, string signalName, DateTime timestamp, object value, SignalType signalType)
+        public LogEntry(string deviceId, string signalKey, string signalName, DateTime timestamp, object value, SignalType signalType)
         {
             DeviceId = deviceId ?? throw new ArgumentNullException(nameof(deviceId));
+            SignalKey = signalKey ?? throw new ArgumentNullException(nameof(signalKey));
             SignalName = signalName ?? throw new ArgumentNullException(nameof(signalName));
             Timestamp = timestamp;
             Value = value ?? throw new ArgumentNullException(nameof(value));
@@ -14,6 +15,8 @@ namespace LOG_TIMING_DIAGRAM.Models
         }
 
         public string DeviceId { get; }
+
+        public string SignalKey { get; }
 
         public string SignalName { get; }
 
@@ -25,7 +28,7 @@ namespace LOG_TIMING_DIAGRAM.Models
 
         public override string ToString()
         {
-            return $"{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {DeviceId}::{SignalName} = {Value}";
+            return $"{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {SignalKey} = {Value}";
         }
     }
 }

@@ -128,16 +128,9 @@
                             <CheckBox Content="String"
                                       IsChecked="{Binding FilterIncludeString}" />
                         </StackPanel>
-                        <CheckBox Grid.Row="2"
-                                  Content="Show only signals with changes"
-                                  Margin="0,0,0,8"
-                                  IsChecked="{Binding FilterShowOnlyChanged}" />
                         <StackPanel Grid.Row="3"
                                     Orientation="Horizontal"
                                     Margin="0,0,0,8">
-                            <Button Content="Select Visible"
-                                    Margin="0,0,8,0"
-                                    Command="{Binding SelectAllFiltersCommand}" />
                             <Button Content="Clear Selection"
                                     Margin="0,0,8,0"
                                     Command="{Binding DeselectAllFiltersCommand}" />
@@ -195,18 +188,24 @@
                             </ListBox.ItemTemplate>
                             <ListBox.GroupStyle>
                                 <GroupStyle>
-                                    <GroupStyle.HeaderTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Name}"
-                                                       FontWeight="Bold"
-                                                       Margin="0,6,0,2" />
-                                        </DataTemplate>
-                                    </GroupStyle.HeaderTemplate>
-                                    <GroupStyle.Panel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel />
-                                        </ItemsPanelTemplate>
-                                    </GroupStyle.Panel>
+                                    <GroupStyle.ContainerStyle>
+                                        <Style TargetType="{x:Type GroupItem}">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="{x:Type GroupItem}">
+                                                        <Expander Margin="0,6,0,2"
+                                                                  IsExpanded="True">
+                                                            <Expander.Header>
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           FontWeight="Bold" />
+                                                            </Expander.Header>
+                                                            <ItemsPresenter />
+                                                        </Expander>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </GroupStyle.ContainerStyle>
                                 </GroupStyle>
                             </ListBox.GroupStyle>
                         </ListBox>
@@ -224,30 +223,6 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <GroupBox Grid.Row="0" Header="Zoom">
-                    <StackPanel>
-                        <Slider Minimum="1"
-                                Maximum="100"
-                                TickFrequency="1"
-                                SmallChange="1"
-                                LargeChange="5"
-                                Value="{Binding ZoomLevel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                IsEnabled="{Binding HasData}" />
-                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                            <Button Content="Zoom In"
-                                    Width="90"
-                                    Margin="0,0,6,0"
-                                    Command="{Binding ZoomInCommand}" />
-                            <Button Content="Zoom Out"
-                                    Width="90"
-                                    Margin="0,0,6,0"
-                                    Command="{Binding ZoomOutCommand}" />
-                            <Button Content="Reset"
-                                    Width="90"
-                                    Command="{Binding ResetViewCommand}" />
-                        </StackPanel>
-                    </StackPanel>
-                </GroupBox>
 
                 <GroupBox Grid.Row="1" Header="Time Window" Margin="0,12,0,12">
                     <StackPanel>
@@ -278,16 +253,11 @@
                         BorderThickness="1"
                         CornerRadius="4"
                         Padding="4">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding ActiveSignals}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <rendering:WaveformRowControl SignalData="{Binding}"
-                                                                  Height="40"
-                                                                  Viewport="{Binding DataContext.Viewport, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <rendering:ActiveSignalsPlotView Signals="{Binding ActiveSignals}"
+                                                         Viewport="{Binding Viewport}"
+                                                         Margin="0,4,0,4" />
                     </ScrollViewer>
                 </Border>
 
@@ -310,11 +280,13 @@
 
                 <DataGrid Grid.Row="5"
                           Margin="0,12,0,0"
-                          ItemsSource="{Binding Entries}"
+                          ItemsSource="{Binding VisibleEntries}"
                           AutoGenerateColumns="False"
                           HeadersVisibility="Column"
                           IsReadOnly="True"
                           CanUserAddRows="False"
+                          MouseDoubleClick="OnEntryRowDoubleClick"
+                          SelectionMode="Single"
                           EnableRowVirtualization="True"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"

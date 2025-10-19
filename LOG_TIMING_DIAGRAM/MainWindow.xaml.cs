@@ -5,8 +5,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Win32;
 using LOG_TIMING_DIAGRAM.ViewModels;
+using LOG_TIMING_DIAGRAM.Models;
 
 namespace LOG_TIMING_DIAGRAM
 {
@@ -102,6 +104,45 @@ namespace LOG_TIMING_DIAGRAM
                 textBox.SelectAll();
                 e.Handled = true;
             }
+        }
+
+        private void OnEntryRowDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (!TryFindDataGridRow(e.OriginalSource, out var row))
+            {
+                return;
+            }
+
+            if (row.Item is not LogEntry entry || ViewModel == null)
+            {
+                return;
+            }
+
+            ViewModel.JumpToTimestamp(entry.Timestamp);
+        }
+
+        private static bool TryFindDataGridRow(object source, out DataGridRow row)
+        {
+            row = null;
+
+            if (source is not DependencyObject element)
+            {
+                return false;
+            }
+
+            var current = element;
+            while (current != null && current is not DataGridRow)
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            if (current is DataGridRow dataGridRow)
+            {
+                row = dataGridRow;
+                return true;
+            }
+
+            return false;
         }
     }
 }

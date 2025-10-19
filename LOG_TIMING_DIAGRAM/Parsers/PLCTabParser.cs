@@ -17,43 +17,58 @@ namespace LOG_TIMING_DIAGRAM.Parsers
         protected override Regex BuildLineRegex()
         {
             // Flexible matcher that ensures we can detect candidate lines before detailed splitting.
-            return new Regex(@"^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}.*$", RegexOptions.Compiled);
+            return new Regex(@"^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3,6}.*$", RegexOptions.Compiled);
         }
 
         protected override ParsedLine MapMatchToParsedLine(Match match)
         {
             var line = match.Value;
-            var tokens = SplitColumns(line);
-            if (tokens.Length < 5)
+
+            var levelStart = line.IndexOf('[', 0);
+            if (levelStart <= 0)
             {
-                throw new FormatException("Expected at least five columns in tab log format.");
+                throw new FormatException("Unable to locate level delimiter.");
             }
 
-            var timestampToken = tokens[0];
-            var pathToken = tokens.Length > 2 ? tokens[2] : tokens[1];
-            var signalToken = tokens.Length > 3 ? tokens[3] : throw new FormatException("Missing signal column.");
+            var timestampToken = line.Substring(0, levelStart).TrimEnd();
 
+            var levelEnd = line.IndexOf(']', levelStart + 1);
+            if (levelEnd < 0)
+            {
+                throw new FormatException("Unable to locate level closing bracket.");
+            }
+
+            var pathStart = levelEnd + 1;
+            while (pathStart < line.Length && char.IsWhiteSpace(line[pathStart]))
+            {
+                pathStart++;
+            }
+
+            var tabIndex = line.IndexOf('\t', pathStart);
+            if (tabIndex < 0)
+            {
+                throw new FormatException("Unable to locate column separator.");
+            }
+
+            var pathToken = line.Substring(pathStart, tabIndex - pathStart).Trim();
+            var remainder = line.Substring(tabIndex + 1).Split('\t');
+            if (remainder.Length == 0)
+            {
+                throw new FormatException("Missing signal column.");
+            }
+
+            var signalToken = remainder[0].Trim();
             string dtypeToken = null;
-            string valueToken = null;
-
-            if (tokens.Length >= 6)
+            string valueToken = remainder.Length > 2 ? remainder[2].Trim() : null;
+            if (string.IsNullOrWhiteSpace(valueToken) && remainder.Length > 3)
             {
-                dtypeToken = tokens[4];
-                valueToken = tokens[5];
-            }
-            else if (tokens.Length == 5)
-            {
-                valueToken = tokens[4];
-            }
-
-            if (string.IsNullOrWhiteSpace(valueToken) && tokens.Length > 6)
-            {
-                valueToken = tokens[6];
+                valueToken = remainder[3].Trim();
             }
 
             var timestamp = ParseTimestamp(timestampToken);
             var (deviceId, unit) = ParseDeviceAndUnit(pathToken);
-            var signalKey = ComposeSignalKey(deviceId, unit, signalToken);
+            var trimmedSignal = signalToken?.Trim();
+            var signalKey = ComposeSignalKey(deviceId, unit, trimmedSignal);
 
             var signalType = DetermineSignalType(dtypeToken, valueToken);
             var value = ConvertValue(valueToken, signalType);
@@ -61,7 +76,8 @@ namespace LOG_TIMING_DIAGRAM.Parsers
             return new ParsedLine
             {
                 DeviceId = deviceId,
-                SignalName = signalKey,
+                SignalKey = signalKey,
+                SignalName = trimmedSignal,
                 Timestamp = timestamp,
                 SignalType = signalType,
                 Value = value

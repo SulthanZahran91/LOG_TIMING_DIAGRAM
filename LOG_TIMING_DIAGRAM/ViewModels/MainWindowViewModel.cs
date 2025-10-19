@@ -19,6 +19,7 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
     {
         private readonly ObservableCollection<LogEntry> _entries;
         private readonly ObservableCollection<SignalData> _activeSignals;
+        private readonly ObservableCollection<LogEntry> _visibleEntries;
         private readonly ObservableCollection<SignalFilterItemViewModel> _signalFilters;
         private readonly Dictionary<string, SignalCache> _signalLookup;
         private readonly List<string> _currentFiles;
@@ -46,6 +47,7 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
         {
             _entries = new ObservableCollection<LogEntry>();
             _activeSignals = new ObservableCollection<SignalData>();
+            _visibleEntries = new ObservableCollection<LogEntry>();
             _signalFilters = new ObservableCollection<SignalFilterItemViewModel>();
             _signalLookup = new Dictionary<string, SignalCache>(StringComparer.OrdinalIgnoreCase);
             _currentFiles = new List<string>();
@@ -90,9 +92,48 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             Viewport.ZoomLevelChanged += OnViewportZoomLevelChanged;
         }
 
+        private void RefreshVisibleEntries(ICollection<string> selectedKeys)
+        {
+            _visibleEntries.Clear();
+
+            if (selectedKeys == null || selectedKeys.Count == 0)
+            {
+                return;
+            }
+
+            var orderedEntries = new List<LogEntry>();
+
+            foreach (var key in selectedKeys)
+            {
+                if (key == null)
+                {
+                    continue;
+                }
+
+                if (_signalLookup.TryGetValue(key, out var cache) && cache.Entries != null)
+                {
+                    orderedEntries.AddRange(cache.Entries);
+                }
+            }
+
+            if (orderedEntries.Count == 0)
+            {
+                return;
+            }
+
+            orderedEntries.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+
+            foreach (var entry in orderedEntries)
+            {
+                _visibleEntries.Add(entry);
+            }
+        }
+
         public IReadOnlyList<LogEntry> Entries => _entries;
 
         public ObservableCollection<SignalData> ActiveSignals => _activeSignals;
+
+        public ObservableCollection<LogEntry> VisibleEntries => _visibleEntries;
 
         public ObservableCollection<SignalFilterItemViewModel> SignalFilters => _signalFilters;
 
@@ -299,7 +340,8 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
                 DetachSignalFilterHandlers();
                 _signalFilters.Clear();
                 _signalLookup.Clear();
-                
+                _visibleEntries.Clear();
+
                 _logTimeRange = null;
                 HasData = false;
                 ClearViewportBindings();
@@ -412,6 +454,7 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
         {
             _entries.Clear();
             _activeSignals.Clear();
+            _visibleEntries.Clear();
             DetachSignalFilterHandlers();
             _signalFilters.Clear();
             _signalLookup.Clear();
@@ -451,6 +494,7 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
         private void UpdateVisibleSignalsFromFilters()
         {
             _activeSignals.Clear();
+            var selectedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var filter in _signalFilters)
             {
@@ -461,6 +505,7 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
 
                 if (_signalLookup.TryGetValue(filter.Key, out var cache))
                 {
+                    selectedKeys.Add(cache.Key);
                     var signalData = cache.GetOrCreateSignalData(_logTimeRange);
                     if (signalData != null)
                     {
@@ -469,8 +514,30 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
                 }
             }
 
+            RefreshVisibleEntries(selectedKeys);
             UpdateFilterStatus();
             RefreshCommandStates();
+        }
+
+        public void JumpToTimestamp(DateTime timestamp)
+        {
+            if (!HasData)
+            {
+                return;
+            }
+
+            var visibleStart = Viewport.VisibleStart;
+            var visibleEnd = Viewport.VisibleEnd;
+            var currentDuration = visibleEnd > visibleStart
+                ? (visibleEnd - visibleStart)
+                : TimeSpan.FromSeconds(NormalizeWindowDuration(_windowDurationSeconds));
+
+            if (currentDuration <= TimeSpan.Zero)
+            {
+                currentDuration = TimeSpan.FromSeconds(10);
+            }
+
+            Viewport.JumpToTime(timestamp, currentDuration);
         }
 
         private void RefreshFilterView()
@@ -716,10 +783,10 @@ namespace LOG_TIMING_DIAGRAM.ViewModels
             _isApplyingViewportWindow = true;
             try
             {
-                var normalized = NormalizeWindowDuration(_windowDurationSeconds);
-                if (!AreClose(_windowDurationSeconds, normalized))
+                const double defaultWindowSeconds = 10.0;
+                if (!AreClose(_windowDurationSeconds, defaultWindowSeconds))
                 {
-                    _windowDurationSeconds = normalized;
+                    _windowDurationSeconds = defaultWindowSeconds;
                     OnPropertyChanged(nameof(WindowDurationSeconds));
                 }
 

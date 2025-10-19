@@ -50,7 +50,7 @@ namespace LOG_TIMING_DIAGRAM.Models
             var devices = new ReadOnlyCollection<string>(
                 entryList.Select(e => e.DeviceId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList());
             var signals = new ReadOnlyCollection<string>(
-                entryList.Select(e => e.SignalName).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList());
+                entryList.Select(e => e.SignalKey).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList());
 
             return new ParsedLog(
                 new ReadOnlyCollection<LogEntry>(entryList),

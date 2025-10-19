@@ -35,3 +35,6 @@
 ## Security & Configuration Tips
 - Strip sensitive PLC identifiers from sample logs before committing; store sanitized copies only.
 - Keep environment-specific config out of source control by using local `*.user` overrides.
+
+## Reference
+- in Python Reference folder, there is a PyQt project that is more mature. If deemed necessary, do not hesitate to use it as reference.

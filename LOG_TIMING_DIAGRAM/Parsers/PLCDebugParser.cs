@@ -8,14 +8,12 @@ namespace LOG_TIMING_DIAGRAM.Parsers
     public sealed class PLCDebugParser : GenericTemplateLogParser
     {
         private static readonly Regex _lineRegex = new Regex(
-            @"^(?<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[(?<level>[^\]]+)\]\s+\[(?<path>[^\]]+)\]\s+\[(?<signal>[^\]]+)\]\s+\((?<dtype>[^)]+)\)\s*:\s*(?<value>.+?)\s*$",
+            @"^(?<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3,6})\s+\[(?<level>[^\]]+)\]\s+\[(?<path>[^\]]+)\]\s+\[(?<signal>[^\]]+)\]\s+\((?<dtype>[^)]+)\)\s*:\s*(?<value>.+?)\s*$",
             RegexOptions.Compiled);
 
         public override string Name => "plc_debug";
 
         protected override Regex BuildLineRegex() => _lineRegex;
-
-        private const int TimestampTokenLength = 23;
 
         protected override ParsedLine ParseLine(string line)
         {
@@ -37,14 +35,15 @@ namespace LOG_TIMING_DIAGRAM.Parsers
 
             var timestamp = ParseTimestamp(ts);
             var (deviceId, unit) = ParsePath(path);
-            var signalKey = ComposeSignalKey(deviceId, unit, signalGroup);
+            var (signalName, signalKey) = NormalizeSignal(deviceId, unit, signalGroup);
             var signalType = InferSignalType(dtype, valueToken);
             var value = ConvertValue(valueToken, signalType);
 
             return new ParsedLine
             {
                 DeviceId = deviceId,
-                SignalName = signalKey,
+                SignalKey = signalKey,
+                SignalName = signalName,
                 Timestamp = timestamp,
                 SignalType = signalType,
                 Value = value
@@ -54,15 +53,15 @@ namespace LOG_TIMING_DIAGRAM.Parsers
         private bool TryParseLineFast(string line, out ParsedLine parsedLine)
         {
             parsedLine = default;
-            if (string.IsNullOrEmpty(line) || line.Length <= TimestampTokenLength)
+            if (string.IsNullOrWhiteSpace(line))
             {
                 return false;
             }
 
             try
             {
-                var levelStart = line.IndexOf('[', TimestampTokenLength);
-                if (levelStart < 0)
+                var levelStart = line.IndexOf('[', 0);
+                if (levelStart <= 0)
                 {
                     return false;
                 }
@@ -131,21 +130,22 @@ namespace LOG_TIMING_DIAGRAM.Parsers
                     ? line.Substring(valueStart, valueEnd - valueStart + 1)
                     : string.Empty;
 
-                var timestampToken = line.Substring(0, TimestampTokenLength);
+                var timestampToken = line.Substring(0, levelStart).Trim();
                 var pathToken = line.Substring(pathStart + 1, pathEnd - pathStart - 1);
                 var signalToken = line.Substring(signalStart + 1, signalEnd - signalStart - 1);
                 var dtypeToken = line.Substring(dtypeStart + 1, dtypeEnd - dtypeStart - 1);
 
                 var timestamp = ParseTimestamp(timestampToken);
                 var (deviceId, unit) = ParsePath(pathToken);
-                var signalKey = ComposeSignalKey(deviceId, unit, signalToken);
+                var (signalName, signalKey) = NormalizeSignal(deviceId, unit, signalToken);
                 var signalType = InferSignalType(dtypeToken, valueToken);
                 var value = ConvertValue(valueToken, signalType);
 
                 parsedLine = new ParsedLine
                 {
                     DeviceId = deviceId,
-                    SignalName = signalKey,
+                    SignalKey = signalKey,
+                    SignalName = signalName,
                     Timestamp = timestamp,
                     SignalType = signalType,
                     Value = value
@@ -297,6 +297,32 @@ namespace LOG_TIMING_DIAGRAM.Parsers
             }
 
             return base.ExtractDeviceId(trimmed);
+        }
+
+        private (string SignalName, string SignalKey) NormalizeSignal(string deviceId, string unit, string rawSignal)
+        {
+            if (rawSignal == null)
+            {
+                rawSignal = string.Empty;
+            }
+
+            var trimmed = rawSignal.Trim();
+            string signalName = trimmed;
+            if (!string.IsNullOrEmpty(trimmed))
+            {
+                var colonIndex = trimmed.IndexOf(':');
+                if (colonIndex >= 0 && colonIndex < trimmed.Length - 1)
+                {
+                    signalName = trimmed.Substring(colonIndex + 1).Trim();
+                    if (signalName.Length == 0)
+                    {
+                        signalName = trimmed;
+                    }
+                }
+            }
+
+            var signalKey = ComposeSignalKey(deviceId, unit, signalName);
+            return (signalName, signalKey);
         }
 
         private static SignalType InferSignalType(string dtype, string valueToken)
