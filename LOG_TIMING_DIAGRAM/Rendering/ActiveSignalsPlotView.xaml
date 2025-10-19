@@ -7,9 +7,13 @@
              mc:Ignorable="d"
              d:DesignHeight="320"
              d:DesignWidth="960">
-    <Grid>
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  Background="Transparent">
         <oxy:PlotView x:Name="Plot"
                       Background="Transparent"
-                      ClipToBounds="True" />
-    </Grid>
+                      ClipToBounds="True"
+                      MinHeight="320"
+                      Margin="0,0,12,0" />
+    </ScrollViewer>
 </UserControl>
